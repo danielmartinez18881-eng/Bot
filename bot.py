@@ -4,7 +4,6 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.environ.get("TOKEN")
-
 ADMIN_ID = 8065330336
 
 if not TOKEN:
@@ -21,6 +20,13 @@ amount_kb = make_keyboard(["200", "400", "600"])
 
 # --- старт ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_user.id != ADMIN_ID:
+        await context.bot.forward_message(
+            chat_id=ADMIN_ID,
+            from_chat_id=update.effective_chat.id,
+            message_id=update.message.message_id
+        )
 
     photo_path = os.path.join("images", "card.jpg")
 
@@ -47,29 +53,11 @@ async def send_cards(update, amount):
     loading_msg = await update.message.reply_text("Загрузка: " + "░" * total_seconds)
 
     for i in range(1, total_seconds + 1):
-
         await asyncio.sleep(1)
-
         bar = "█" * i + "░" * (total_seconds - i)
-
         await loading_msg.edit_text(f"Загрузка: {bar}")
 
     await loading_msg.edit_text("Карточка")
-
-
-# --- пересылка сообщений админу ---
-async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    user_id = update.effective_user.id
-
-    if user_id == ADMIN_ID:
-        return
-
-    await context.bot.forward_message(
-        chat_id=ADMIN_ID,
-        from_chat_id=update.effective_chat.id,
-        message_id=update.message.message_id
-    )
 
 
 # --- ответ администратора ---
@@ -84,14 +72,10 @@ async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     original = update.message.reply_to_message
 
     if original.forward_from_chat:
-
         user_id = original.forward_from_chat.id
 
         if update.message.text:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=update.message.text
-            )
+            await context.bot.send_message(chat_id=user_id, text=update.message.text)
 
         elif update.message.photo:
             await context.bot.send_photo(
@@ -101,10 +85,19 @@ async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 
-# --- логика бота ---
+# --- основной обработчик ---
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    user_id = update.effective_user.id
     text = update.message.text.strip()
+
+    # пересылаем админу
+    if user_id != ADMIN_ID:
+        await context.bot.forward_message(
+            chat_id=ADMIN_ID,
+            from_chat_id=update.effective_chat.id,
+            message_id=update.message.message_id
+        )
 
     state = context.user_data.get("state", "START")
 
@@ -142,16 +135,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- запуск ---
 app = ApplicationBuilder().token(TOKEN).build()
 
-# команды
 app.add_handler(CommandHandler("start", start))
 
-# логика текста
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-# пересылка сообщений админу (кроме команд)
-app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND & ~filters.User(ADMIN_ID), forward_to_admin))
-
-# ответы администратора
+# админ отвечает reply
 app.add_handler(MessageHandler(filters.ALL & filters.User(ADMIN_ID), admin_reply))
 
 
