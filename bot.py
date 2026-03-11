@@ -34,9 +34,8 @@ def format_time(seconds):
     s = seconds % 60
     return f"{m:02d}:{s:02d}"
 
-# --- текст реквизитов ---
+# --- текст реквизитов с таймером ---
 def build_payment_text(seconds_left):
-
     minutes_left = seconds_left // 60
     bar = build_bar(minutes_left)
     timer = format_time(seconds_left)
@@ -54,33 +53,23 @@ def build_payment_text(seconds_left):
     )
 
 # --- таймер ---
-async def payment_timer(message, context):
-
+async def payment_timer(message):
     seconds = 1200
-
     while seconds > 0:
-
         await asyncio.sleep(60)
         seconds -= 60
-
         try:
-            await message.edit_text(
-                build_payment_text(seconds),
-                reply_markup=get_data_kb
-            )
+            await message.edit_text(build_payment_text(seconds), reply_markup=get_data_kb)
         except:
             return
-
     try:
         await message.delete()
     except:
         pass
 
-
 # --- отправка реквизитов ---
 async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    # удаляем старые реквизиты
+    # удалить старые реквизиты
     if "payment_msg" in context.user_data:
         try:
             await context.bot.delete_message(
@@ -93,106 +82,73 @@ async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- загрузка ---
     total = 10
     msg = await update.message.reply_text("Cargando: " + "░" * total)
-
     for i in range(1, total + 1):
         await asyncio.sleep(1)
         bar = "█" * i + "░" * (total - i)
         await msg.edit_text(f"Cargando: {bar}")
-
     await msg.delete()
 
-    # --- отправляем реквизиты сразу с таймером ---
-    payment_msg = await update.message.reply_text(
-        build_payment_text(1200),
-        reply_markup=get_data_kb
-    )
-
+    # --- отправка реквизитов с таймером сразу ---
+    payment_msg = await update.message.reply_text(build_payment_text(1200), reply_markup=get_data_kb)
     context.user_data["payment_msg"] = payment_msg.message_id
 
-    asyncio.create_task(payment_timer(payment_msg, context))
-
+    # запуск таймера
+    asyncio.create_task(payment_timer(payment_msg))
 
 # --- старт ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Сброс состояния пользователя при /start
+    context.user_data.clear()
+    context.user_data["state"] = "START"
 
     photo_path = os.path.join("images", "card.jpg")
-
     text = (
         "Hola, este es un bot para recargar el saldo de la plataforma Bybit.\n"
         "Aquí puede obtener los datos necesarios para realizar la recarga.\n\n"
         "Para comenzar, haga clic en el botón «Inicio»"
     )
-
     if os.path.exists(photo_path):
         with open(photo_path, "rb") as photo:
-            await update.message.reply_photo(
-                photo=photo,
-                caption=text,
-                reply_markup=start_kb
-            )
+            await update.message.reply_photo(photo=photo, caption=text, reply_markup=start_kb)
     else:
         await update.message.reply_text(text, reply_markup=start_kb)
 
-
 # --- пересылка админу ---
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     user = update.effective_user
     msg = update.message
-
     user_info = f"👤 {user.first_name} | ID:{user.id}"
     await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=user_info)
-
     if msg.text:
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg.text)
-
     elif msg.photo:
-        await context.bot.send_photo(
-            chat_id=ADMIN_CHAT_ID,
-            photo=msg.photo[-1].file_id,
-            caption=msg.caption
-        )
-
+        await context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=msg.photo[-1].file_id, caption=msg.caption)
     elif msg.document:
-        await context.bot.send_document(
-            chat_id=ADMIN_CHAT_ID,
-            document=msg.document.file_id,
-            caption=msg.caption
-        )
-
+        await context.bot.send_document(chat_id=ADMIN_CHAT_ID, document=msg.document.file_id, caption=msg.caption)
 
 # --- ответы из админ чата ---
 async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     if update.effective_chat.id != ADMIN_CHAT_ID:
         return
-
     if not update.message.reply_to_message:
         return
-
     msg = update.message
     reply = msg.reply_to_message
-
     lines = reply.text.splitlines() if reply.text else []
     user_id = None
-
     for line in lines:
         if "ID:" in line:
             try:
                 user_id = int(line.split("ID:")[1])
             except:
                 pass
-
     if not user_id:
         return
-
     if msg.text:
         await context.bot.send_message(chat_id=user_id, text=msg.text)
 
-
 # --- основной обработчик ---
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     msg = update.message
     user = update.effective_user
 
@@ -207,50 +163,34 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- Inicio ---
     if state == "START" and text == "Inicio":
-
         if "deposit_id" not in context.user_data:
             context.user_data["deposit_id"] = generate_user_id()
-
         deposit_id = context.user_data["deposit_id"]
         name = user.first_name
-
-        message = (
-            f"{name}\n\n"
-            "Se le ha asignado un número único\n"
-            f"ID {deposit_id}\n\n"
-            "Desea realizar el depósito ahora o más tarde?"
-        )
-
+        message = f"{name}\n\nSe le ha asignado un número único\nID {deposit_id}\n\nDesea realizar el depósito ahora o más tarde?"
         await msg.reply_text(message, reply_markup=deposit_kb)
-
         context.user_data["state"] = "ASK_DEPOSIT"
 
     # --- Ahora ---
     elif state == "ASK_DEPOSIT" and text == "Ahora":
-
         await send_payment_info(update, context)
         context.user_data["state"] = "WAIT_DATA"
 
     # --- Más tarde ---
     elif state == "ASK_DEPOSIT" and text == "Más tarde":
-
         await msg.reply_text(
             "Los datos de la plataforma se actualizan constantemente para garantizar la seguridad de los clientes.\n\n"
             "Cuando esté listo para realizar un depósito, haga clic en el botón «Obtener datos💳»",
             reply_markup=get_data_kb
         )
-
         context.user_data["state"] = "WAIT_DATA"
 
     # --- Obtener datos ---
     elif state == "WAIT_DATA" and text == "Obtener datos💳":
-
         await send_payment_info(update, context)
-
 
 # --- запуск ---
 app = ApplicationBuilder().token(TOKEN).build()
-
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.ALL & ~filters.Chat(ADMIN_CHAT_ID), message_handler))
 app.add_handler(MessageHandler(filters.ALL & filters.Chat(ADMIN_CHAT_ID), admin_reply))
