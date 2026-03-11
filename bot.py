@@ -4,9 +4,10 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-TOKEN = os.environ.get('TOKEN')  # Токен берется из переменной окружения
+# Токен берется из переменной окружения
+TOKEN = os.environ.get("TOKEN")
 
-# --- Клавиатуры ---
+# --- Inline-клавиатуры ---
 start_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Старт", callback_data="start")]])
 yes_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Да", callback_data="yes")]])
 amount_kb = InlineKeyboardMarkup([
@@ -15,10 +16,10 @@ amount_kb = InlineKeyboardMarkup([
     [InlineKeyboardButton("600", callback_data="600")]
 ])
 
-# --- Обработчик /start ---
+# --- /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(
-        photo="https://via.placeholder.com/300x150.png?text=Карточка",
+        photo="https://via.placeholder.com/300x150.png?text=Карточка",  # Здесь можно поставить свою картинку
         caption="Здравствуйте, это официальный бот для карточек. Чтобы получить карточку, нажмите Старт",
         reply_markup=start_kb
     )
@@ -42,7 +43,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data in ["200", "400", "600"]:
         await query.message.reply_text("Хорошо, сейчас создам пакет карточек специально для тебя")
         loading_msg = await query.message.reply_text("Загрузка: ░░░░░░░░░░")
-        # Анимация загрузки
+        # Анимация загрузки 10 секунд
         for i in range(1, 11):
             await asyncio.sleep(1)
             bar = "█" * i + "░" * (10 - i)
