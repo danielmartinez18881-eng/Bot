@@ -25,10 +25,10 @@ def generate_user_id():
 
 
 # ---------- прогресс бар ----------
-def build_bar(minutes_left):
-    total = 20
-    green = int((minutes_left / total) * 10)
-    return "🟢" * green + "⚪" * (10 - green)
+def build_bar(seconds_left):
+    total_minutes = 20
+    green_blocks = int((seconds_left / (total_minutes * 60)) * 10)
+    return "🟢" * green_blocks + "⚪" * (10 - green_blocks)
 
 
 # ---------- формат времени ----------
@@ -40,8 +40,7 @@ def format_time(seconds):
 
 # ---------- текст реквизитов ----------
 def build_payment_text(seconds_left):
-    minutes_left = seconds_left // 60
-    bar = build_bar(minutes_left)
+    bar = build_bar(seconds_left)
     timer = format_time(seconds_left)
     return (
         "DATOS ACTUALES:\n\n"
@@ -57,10 +56,10 @@ def build_payment_text(seconds_left):
 
 # ---------- таймер ----------
 async def payment_timer(message, context, user_id):
-    seconds = 1200  # 20 минут
+    seconds = 1200  # 20 минут = 1200 секунд
     while seconds > 0:
-        await asyncio.sleep(60)
-        seconds -= 60
+        await asyncio.sleep(30)  # обновление каждые 30 секунд
+        seconds -= 30
         try:
             await context.bot.edit_message_text(
                 chat_id=message.chat.id,
@@ -79,7 +78,6 @@ async def payment_timer(message, context, user_id):
 
 # ---------- отправка реквизитов ----------
 async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     # удалить старое сообщение с реквизитом
     if "payment_msg" in context.user_data:
         try:
@@ -109,7 +107,6 @@ async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------- старт ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     # удалить старое сообщение с реквизитом при /start
     if "payment_msg" in context.user_data:
         try:
