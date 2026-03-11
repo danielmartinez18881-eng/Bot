@@ -5,7 +5,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 
 TOKEN = os.environ.get("TOKEN")
 
-# --- Inline-клавиатуры ---
+# Inline-клавиатуры
 start_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Старт", callback_data="start")]])
 yes_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Да", callback_data="yes")]])
 amount_kb = InlineKeyboardMarkup([
@@ -14,9 +14,8 @@ amount_kb = InlineKeyboardMarkup([
     [InlineKeyboardButton("600", callback_data="600")]
 ])
 
-# --- Обработчик /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    photo_path = os.path.join("images", "card.jpg")  # локальная картинка
+    photo_path = os.path.join("images", "card.jpg")
     with open(photo_path, "rb") as photo_file:
         await update.message.reply_photo(
             photo=photo_file,
@@ -24,11 +23,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=start_kb
         )
 
-# --- Обработчик нажатий кнопок ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+
+    # Показываем выбор пользователя прямо в чате
+    await query.message.reply_text(data)
 
     if data == "start":
         await query.message.reply_text(
@@ -41,20 +42,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=amount_kb
         )
     elif data in ["200", "400", "600"]:
-        # Сообщение о создании пакета
         await query.message.reply_text("Хорошо, сейчас создам пакет карточек специально для тебя")
 
-        # Анимация загрузки в чате
+        # Анимация загрузки 10 секунд
         loading_msg = await query.message.reply_text("Загрузка: ░░░░░░░░░░")
         for i in range(1, 11):
             await asyncio.sleep(1)
             bar = "█" * i + "░" * (10 - i)
             await loading_msg.edit_text(f"Загрузка: {bar}")
 
-        # Финальная карточка (текст, можно заменить на изображение)
+        # Финальная карточка
         await query.message.reply_text("Карточка")
 
-# --- Настройка приложения ---
+# Настройка приложения
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(button_handler))
