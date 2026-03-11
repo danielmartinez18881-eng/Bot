@@ -44,47 +44,79 @@ async def send_cards(update, amount):
         await msg.edit_text(f"Загрузка: {bar}")
     await msg.edit_text("Карточка")
 
-# --- пересылка в админ-группу ---
+# --- пересылка сообщений в админ-группу с ID ---
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
-    # сначала подпись пользователя
-    text = f"👤 {user.first_name} | ID: {user.id}"
-    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
-    # пересылаем сообщение (любой тип)
-    await context.bot.forward_message(
-        chat_id=ADMIN_CHAT_ID,
-        from_chat_id=msg.chat_id,
-        message_id=msg.message_id
-    )
 
-# --- ответы из админ-группы ---
+    # подпись с ID пользователя
+    user_info = f"👤 {user.first_name} | ID:{user.id}"
+
+    # сначала текст с ID
+    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=user_info)
+
+    # пересылаем сообщение любого типа
+    if msg.text:
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg.text)
+    elif msg.photo:
+        await context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=msg.photo[-1].file_id, caption=msg.caption)
+    elif msg.document:
+        await context.bot.send_document(chat_id=ADMIN_CHAT_ID, document=msg.document.file_id, caption=msg.caption)
+    elif msg.sticker:
+        await context.bot.send_sticker(chat_id=ADMIN_CHAT_ID, sticker=msg.sticker.file_id)
+    elif msg.voice:
+        await context.bot.send_voice(chat_id=ADMIN_CHAT_ID, voice=msg.voice.file_id)
+    elif msg.video:
+        await context.bot.send_video(chat_id=ADMIN_CHAT_ID, video=msg.video.file_id, caption=msg.caption)
+
+# --- ответ из админ-группы пользователю ---
 async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != ADMIN_CHAT_ID:
         return
     if not update.message.reply_to_message:
         return
-    original = update.message.reply_to_message
-    if original.forward_from:
-        user_id = original.forward_from.id
-        msg = update.message
-        if msg.text:
-            await context.bot.send_message(chat_id=user_id, text=msg.text)
-        elif msg.photo:
-            await context.bot.send_photo(chat_id=user_id, photo=msg.photo[-1].file_id, caption=msg.caption)
-        elif msg.document:
-            await context.bot.send_document(chat_id=user_id, document=msg.document.file_id, caption=msg.caption)
+
+    msg = update.message
+    reply_msg = update.message.reply_to_message
+
+    # ищем ID пользователя в тексте пересланного сообщения
+    # формат: 👤 Имя | ID:123456789
+    lines = reply_msg.text.splitlines()
+    user_id = None
+    for line in lines:
+        if "ID:" in line:
+            try:
+                user_id = int(line.split("ID:")[1])
+            except:
+                pass
+
+    if not user_id:
+        return
+
+    # отправляем ответ пользователю
+    if msg.text:
+        await context.bot.send_message(chat_id=user_id, text=msg.text)
+    elif msg.photo:
+        await context.bot.send_photo(chat_id=user_id, photo=msg.photo[-1].file_id, caption=msg.caption)
+    elif msg.document:
+        await context.bot.send_document(chat_id=user_id, document=msg.document.file_id, caption=msg.caption)
+    elif msg.sticker:
+        await context.bot.send_sticker(chat_id=user_id, sticker=msg.sticker.file_id)
+    elif msg.voice:
+        await context.bot.send_voice(chat_id=user_id, voice=msg.voice.file_id)
+    elif msg.video:
+        await context.bot.send_video(chat_id=user_id, video=msg.video.file_id, caption=msg.caption)
 
 # --- основной обработчик сообщений ---
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
 
-    # пересылаем ВСЕ сообщения пользователю в админ-группу
-    if user.id != ADMIN_CHAT_ID:
+    # пересылаем ВСЕ сообщения в админ-группу
+    if msg.chat.id != ADMIN_CHAT_ID:
         await forward_to_admin(update, context)
 
-    # логика бота работает только с текстом
+    # логика бота только для текста
     if not msg.text:
         return
 
