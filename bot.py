@@ -23,47 +23,53 @@ def generate_user_id():
     return "".join(str(random.randint(0, 9)) for _ in range(7)) + "****"
 
 # --- прогресс бар ---
-def build_progress_bar(minutes_left, total=20):
-    progress = int((minutes_left / total) * 10)
-    green = "🟢" * progress
-    white = "⚪" * (10 - progress)
-    return green + white
+def build_bar(minutes_left):
+    total = 20
+    green = int((minutes_left / total) * 10)
+    return "🟢" * green + "⚪" * (10 - green)
 
 # --- формат времени ---
 def format_time(seconds):
-    minutes = seconds // 60
-    sec = seconds % 60
-    return f"{minutes:02d}:{sec:02d}"
+    m = seconds // 60
+    s = seconds % 60
+    return f"{m:02d}:{s:02d}"
 
-# --- таймер реквизитов ---
+# --- текст реквизитов ---
+def build_payment_text(seconds_left):
+
+    minutes_left = seconds_left // 60
+    bar = build_bar(minutes_left)
+    timer = format_time(seconds_left)
+
+    return (
+        "DATOS ACTUALES:\n\n"
+        "NEQUI ✅\n"
+        "Beneficiario: Jose Zalupa\n"
+        "Número: 6382929393\n\n"
+        "Después de realizar el pago, envíe una captura de pantalla del recibo al corredor "
+        "con el que trabaja para confirmar el pago ❗\n\n"
+        "ESTA INFORMACIÓN ES VÁLIDA DURANTE 20 MINUTOS DESDE EL MOMENTO DE SU RECEPCIÓN❗️\n\n"
+        f"{bar}\n"
+        f"Tiempo restante: {timer}"
+    )
+
+# --- таймер ---
 async def payment_timer(message, context):
 
-    total_seconds = 1200  # 20 минут
+    seconds = 1200
 
-    while total_seconds > 0:
-
-        minutes_left = total_seconds // 60
-        bar = build_progress_bar(minutes_left)
-        timer = format_time(total_seconds)
-
-        text = (
-            "DATOS ACTUALES:\n"
-            "NEQUI ✅\n"
-            "Beneficiario: Jose Zalupa\n"
-            "Número: 6382929393\n\n"
-            "Después de realizar el pago, envíe una captura de pantalla del recibo al corredor "
-            "con el que trabaja para confirmar el pago ❗\n\n"
-            f"{bar}\n"
-            f"Tiempo restante: {timer}"
-        )
-
-        try:
-            await message.edit_text(text, reply_markup=get_data_kb)
-        except:
-            break
+    while seconds > 0:
 
         await asyncio.sleep(60)
-        total_seconds -= 60
+        seconds -= 60
+
+        try:
+            await message.edit_text(
+                build_payment_text(seconds),
+                reply_markup=get_data_kb
+            )
+        except:
+            return
 
     try:
         await message.delete()
@@ -71,10 +77,10 @@ async def payment_timer(message, context):
         pass
 
 
-# --- отправка платежных данных ---
+# --- отправка реквизитов ---
 async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    # удалить старые реквизиты
+    # удаляем старые реквизиты
     if "payment_msg" in context.user_data:
         try:
             await context.bot.delete_message(
@@ -84,6 +90,7 @@ async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
+    # --- загрузка ---
     total = 10
     msg = await update.message.reply_text("Cargando: " + "░" * total)
 
@@ -94,16 +101,11 @@ async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await msg.delete()
 
-    text = (
-        "DATOS ACTUALES:\n"
-        "NEQUI ✅\n"
-        "Beneficiario: Jose Zalupa\n"
-        "Número: 6382929393\n\n"
-        "Después de realizar el pago, envíe una captura de pantalla del recibo al corredor "
-        "con el que trabaja para confirmar el pago ❗"
+    # --- отправляем реквизиты сразу с таймером ---
+    payment_msg = await update.message.reply_text(
+        build_payment_text(1200),
+        reply_markup=get_data_kb
     )
-
-    payment_msg = await update.message.reply_text(text, reply_markup=get_data_kb)
 
     context.user_data["payment_msg"] = payment_msg.message_id
 
@@ -132,14 +134,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, reply_markup=start_kb)
 
 
-# --- пересылка сообщений админу ---
+# --- пересылка админу ---
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
     msg = update.message
 
     user_info = f"👤 {user.first_name} | ID:{user.id}"
-
     await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=user_info)
 
     if msg.text:
@@ -160,7 +161,7 @@ async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# --- ответы из админ группы ---
+# --- ответы из админ чата ---
 async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.effective_chat.id != ADMIN_CHAT_ID:
@@ -170,9 +171,9 @@ async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     msg = update.message
-    reply_msg = msg.reply_to_message
+    reply = msg.reply_to_message
 
-    lines = reply_msg.text.splitlines() if reply_msg.text else []
+    lines = reply.text.splitlines() if reply.text else []
     user_id = None
 
     for line in lines:
@@ -228,7 +229,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif state == "ASK_DEPOSIT" and text == "Ahora":
 
         await send_payment_info(update, context)
-
         context.user_data["state"] = "WAIT_DATA"
 
     # --- Más tarde ---
