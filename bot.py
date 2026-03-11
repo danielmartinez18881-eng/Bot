@@ -22,75 +22,30 @@ get_data_kb = make_keyboard(["Obtener datos💳"])
 def generate_user_id():
     return "".join(str(random.randint(0, 9)) for _ in range(7)) + "****"
 
-# ---------- прогресс бар ----------
-def build_bar(seconds_left):
-    total_minutes = 20
-    current_minutes = seconds_left // 60
-    green = int((current_minutes / total_minutes) * 10)
-    return "🟢" * green + "⚪" * (10 - green)
-
-# ---------- формат времени ----------
-def format_time(seconds):
-    m = seconds // 60
-    s = seconds % 60
-    return f"{m:02d}:{s:02d}"
-
 # ---------- текст реквизитов ----------
-def build_payment_text(seconds_left):
-    bar = build_bar(seconds_left)
-    timer = format_time(seconds_left)
+def build_payment_text():
     return (
         "DATOS ACTUALES:\n\n"
         "NEQUI ✅\n"
         "Beneficiario: Jose Zalupa\n"
         "Número: 6382929393\n\n"
         "Después de realizar el pago, envíe una captura de pantalla del recibo al corredor con el que trabaja para confirmar el pago ❗\n\n"
-        "ESTA INFORMACIÓN ES VÁLIDA DURANTE 20 MINUTOS DESDE EL MOMENTO DE SU RECEPCIÓN❗️\n\n"
-        f"{bar}\n"
-        f"Tiempo restante: {timer}"
+        "ESTA INFORMACIÓN ES VÁLIDA DURANTE 20 MINUTOS DESDE EL MOMENTO DE SU RECEPCIÓN❗️"
     )
 
-# ---------- таймер с обновлением каждые 30 секунд ----------
-async def payment_timer(message, context, total_seconds=1200):
-    """Таймер для сообщения с реквизитами, обновляется каждые 30 секунд."""
+# ---------- удаление реквизита через 20 минут ----------
+async def delete_after_20min(chat_id, message_id, context):
+    await asyncio.sleep(1200)  # 20 минут
     try:
-        seconds_left = total_seconds
-        while seconds_left > 0:
-            # Редактируем сообщение с прогресс-баром и таймером
-            await context.bot.edit_message_text(
-                chat_id=message.chat.id,
-                message_id=message.message_id,
-                text=build_payment_text(seconds_left),
-                reply_markup=get_data_kb
-            )
-
-            # Ждём 30 секунд
-            await asyncio.sleep(30)
-            seconds_left -= 30
-
-        # Время вышло — удаляем сообщение
-        await context.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-        context.user_data.pop("payment_msg_id", None)
-        context.user_data.pop("payment_task", None)
-
-    except asyncio.CancelledError:
-        # Таймер отменён (пользователь запросил новые реквизиты)
-        return
-    except Exception:
-        return
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except:
+        pass
 
 # ---------- отправка реквизитов ----------
 async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    # Отменяем старую задачу таймера
-    if "payment_task" in context.user_data:
-        task = context.user_data["payment_task"]
-        if not task.done():
-            task.cancel()
-        context.user_data.pop("payment_task", None)
-
-    # Удаляем старое сообщение с реквизитами
+    # Удаляем старое сообщение с реквизитом
     old_msg_id = context.user_data.get("payment_msg_id")
     if old_msg_id:
         try:
@@ -98,36 +53,30 @@ async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    # Анимация загрузки (5 секунд)
-    loading = await update.message.reply_text("Cargando: ░░░░░")
-    for i in range(1, 6):
-        bar = "█" * i + "░" * (5 - i)
+    # Анимация загрузки 8 секунд
+    loading = await update.message.reply_text("Cargando: ░░░░░░░░")
+    for i in range(1, 9):
+        bar = "█" * i + "░" * (8 - i)
         await loading.edit_text(f"Cargando: {bar}")
         await asyncio.sleep(1)
     await loading.delete()
 
-    # Отправка нового сообщения с реквизитами
-    payment_msg = await update.message.reply_text(build_payment_text(1200), reply_markup=get_data_kb)
+    # Отправляем новое сообщение с реквизитами
+    payment_msg = await update.message.reply_text(build_payment_text(), reply_markup=get_data_kb)
     context.user_data["payment_msg_id"] = payment_msg.message_id
 
-    # Запуск таймера
-    task = asyncio.create_task(payment_timer(payment_msg, context))
-    context.user_data["payment_task"] = task
+    # Запускаем задачу на удаление через 20 минут
+    asyncio.create_task(delete_after_20min(chat_id, payment_msg.message_id, context))
 
 # ---------- старт ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    # Полностью очищаем предыдущий платёж
-    if "payment_task" in context.user_data:
-        task = context.user_data["payment_task"]
-        if not task.done():
-            task.cancel()
-        context.user_data.pop("payment_task", None)
-
-    if "payment_msg_id" in context.user_data:
+    # Удаляем старое сообщение с реквизитом
+    old_msg_id = context.user_data.get("payment_msg_id")
+    if old_msg_id:
         try:
-            await context.bot.delete_message(chat_id=chat_id, message_id=context.user_data["payment_msg_id"])
+            await context.bot.delete_message(chat_id=chat_id, message_id=old_msg_id)
         except:
             pass
         context.user_data.pop("payment_msg_id", None)
