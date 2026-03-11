@@ -4,50 +4,77 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.environ.get("TOKEN")
+if not TOKEN:
+    raise ValueError("Не установлен токен бота в переменной окружения TOKEN")
 
-# --- клавиатуры ---
-start_kb = ReplyKeyboardMarkup([["Старт"]], one_time_keyboard=True, resize_keyboard=True)
-yes_kb = ReplyKeyboardMarkup([["Да"]], one_time_keyboard=True, resize_keyboard=True)
-amount_kb = ReplyKeyboardMarkup([["200", "400", "600"]], one_time_keyboard=True, resize_keyboard=True)
+# --- функции для клавиатур ---
+def make_keyboard(options):
+    return ReplyKeyboardMarkup([options], one_time_keyboard=True, resize_keyboard=True)
 
+start_kb = make_keyboard(["Старт"])
+yes_kb = make_keyboard(["Да"])
+amount_kb = make_keyboard(["200", "400", "600"])
+
+# --- стартовое сообщение ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_path = os.path.join("images", "card.jpg")
-    with open(photo_path, "rb") as photo_file:
-        await update.message.reply_photo(
-            photo=photo_file,
-            caption="Здравствуйте, это официальный бот для карточек. Чтобы получить карточку, нажмите Старт",
+    if os.path.exists(photo_path):
+        with open(photo_path, "rb") as photo_file:
+            await update.message.reply_photo(
+                photo=photo_file,
+                caption="Здравствуйте, это официальный бот для карточек. Чтобы получить карточку, нажмите Старт",
+                reply_markup=start_kb
+            )
+    else:
+        await update.message.reply_text(
+            "Здравствуйте, это официальный бот для карточек. Чтобы получить карточку, нажмите Старт",
             reply_markup=start_kb
         )
 
+# --- функция для анимации и выдачи карточки ---
+async def send_cards(update, amount):
+    await update.message.reply_text(f"Генерируем пакет карточек ({amount})")
+    
+    # Создаём сообщение загрузки
+    total_seconds = 14
+    loading_msg = await update.message.reply_text("Загрузка: " + "░" * total_seconds)
+    
+    # Анимация загрузки
+    for i in range(1, total_seconds + 1):
+        await asyncio.sleep(1)
+        bar = "█" * i + "░" * (total_seconds - i)
+        await loading_msg.edit_text(f"Загрузка: {bar}")
+    
+    # Загрузка завершена — заменяем сообщение на "Карточка"
+    await loading_msg.edit_text("Карточка")
+
+# --- обработчик текстовых сообщений ---
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
+    state = context.user_data.get("state", "START")
 
-    if text == "Старт":
+    if state == "START" and text == "Старт":
         await update.message.reply_text(
             "Я разработан компанией сисистик для выдачи карточек. Вы хотите получить карточку сейчас?",
             reply_markup=yes_kb
         )
-    elif text == "Да":
+        context.user_data["state"] = "ASK_YES"
+
+    elif state == "ASK_YES" and text == "Да":
         await update.message.reply_text(
             "Хорошо, на какую сумму вы хотите получить карточки?",
             reply_markup=amount_kb
         )
-    elif text in ["200", "400", "600"]:
-        await update.message.reply_text(f"Хорошо, сейчас создам пакет карточек специально для тебя ({text})")
+        context.user_data["state"] = "ASK_AMOUNT"
 
-        # Анимация загрузки 10 секунд
-        loading_msg = await update.message.reply_text("Загрузка: ░░░░░░░░░░")
-        for i in range(1, 11):
-            await asyncio.sleep(1)
-            bar = "█" * i + "░" * (10 - i)
-            await loading_msg.edit_text(f"Загрузка: {bar}")
+    elif state == "ASK_AMOUNT" and text in ["200", "400", "600"]:
+        await send_cards(update, text)
+        context.user_data["state"] = "START"
 
-        # Финальная карточка (текст)
-        await update.message.reply_text("Карточка")
     else:
         await update.message.reply_text("Пожалуйста, используйте кнопки ниже для выбора.")
 
-# --- Настройка приложения ---
+# --- настройка приложения ---
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
