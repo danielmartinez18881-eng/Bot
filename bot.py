@@ -5,9 +5,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 
 TOKEN = os.environ.get("TOKEN")
 
-# Inline-клавиатуры
-start_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Старт", callback_data="start")]])
-yes_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Да", callback_data="yes")]])
+# --- Inline-клавиатуры ---
+start_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Старт", callback_data="Старт")]])
+yes_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Да", callback_data="Да")]])
 amount_kb = InlineKeyboardMarkup([
     [InlineKeyboardButton("200", callback_data="200")],
     [InlineKeyboardButton("400", callback_data="400")],
@@ -28,21 +28,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
 
-    # Показываем выбор пользователя прямо в чате
-    await query.message.reply_text(data)
+    # Имитируем сообщение пользователя в чате
+    await query.message.reply_text(data)  
 
-    if data == "start":
+    if data == "Старт":
         await query.message.reply_text(
             "Я разработан компанией сисистик для выдачи карточек. Вы хотите получить карточку сейчас?",
             reply_markup=yes_kb
         )
-    elif data == "yes":
+    elif data == "Да":
         await query.message.reply_text(
             "Хорошо, на какую сумму вы хотите получить карточки?",
             reply_markup=amount_kb
         )
     elif data in ["200", "400", "600"]:
-        await query.message.reply_text("Хорошо, сейчас создам пакет карточек специально для тебя")
+        await query.message.reply_text(f"Хорошо, сейчас создам пакет карточек специально для тебя ({data})")
 
         # Анимация загрузки 10 секунд
         loading_msg = await query.message.reply_text("Загрузка: ░░░░░░░░░░")
@@ -51,10 +51,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bar = "█" * i + "░" * (10 - i)
             await loading_msg.edit_text(f"Загрузка: {bar}")
 
-        # Финальная карточка
+        # Финальная карточка (текст)
         await query.message.reply_text("Карточка")
 
-# Настройка приложения
+# --- Настройка приложения ---
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(button_handler))
