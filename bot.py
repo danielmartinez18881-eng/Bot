@@ -1,4 +1,5 @@
 import os
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -13,8 +14,9 @@ amount_kb = InlineKeyboardMarkup([
     [InlineKeyboardButton("600", callback_data="600")]
 ])
 
+# --- Обработчик /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    photo_path = os.path.join("images", "card.jpg")
+    photo_path = os.path.join("images", "card.jpg")  # локальная картинка
     with open(photo_path, "rb") as photo_file:
         await update.message.reply_photo(
             photo=photo_file,
@@ -22,6 +24,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=start_kb
         )
 
+# --- Обработчик нажатий кнопок ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -33,14 +36,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=yes_kb
         )
     elif data == "yes":
-        # Здесь показываем выбор суммы
         await query.message.reply_text(
             "Хорошо, на какую сумму вы хотите получить карточки?",
             reply_markup=amount_kb
         )
     elif data in ["200", "400", "600"]:
-        # Пока просто подтверждаем выбор
-        await query.message.reply_text(f"Вы выбрали {data} карточек. На следующем этапе будет генерация пакета.")
+        # Сообщение о создании пакета
+        await query.message.reply_text("Хорошо, сейчас создам пакет карточек специально для тебя")
+
+        # Анимация загрузки в чате
+        loading_msg = await query.message.reply_text("Загрузка: ░░░░░░░░░░")
+        for i in range(1, 11):
+            await asyncio.sleep(1)
+            bar = "█" * i + "░" * (10 - i)
+            await loading_msg.edit_text(f"Загрузка: {bar}")
+
+        # Финальная карточка (текст, можно заменить на изображение)
+        await query.message.reply_text("Карточка")
 
 # --- Настройка приложения ---
 app = ApplicationBuilder().token(TOKEN).build()
