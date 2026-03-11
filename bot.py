@@ -72,7 +72,6 @@ async def start_payment_timer(message, context):
 
 # --- отправка реквизитов и уведомление админу ---
 async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     # загрузка
     total = 10
     load_msg = await update.message.reply_text("Cargando: " + "░" * total)
@@ -176,12 +175,15 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     user = update.effective_user
 
+    # пересылаем админу
     if msg.chat.id != ADMIN_CHAT_ID:
         await forward_to_admin(update, context)
-    if not msg.text:
+
+    # проверяем текст
+    text = (msg.text or msg.caption or "").strip()
+    if not text:
         return
 
-    text = msg.text.strip()
     state = context.user_data.get("state", "START")
 
     # --- Inicio ---
