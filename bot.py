@@ -47,15 +47,17 @@ async def send_cards(update, amount):
     loading_msg = await update.message.reply_text("Загрузка: " + "░" * total_seconds)
 
     for i in range(1, total_seconds + 1):
+
         await asyncio.sleep(1)
 
         bar = "█" * i + "░" * (total_seconds - i)
+
         await loading_msg.edit_text(f"Загрузка: {bar}")
 
     await loading_msg.edit_text("Карточка")
 
 
-# --- пересылка ВСЕХ сообщений админу ---
+# --- пересылка сообщений админу ---
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
@@ -140,17 +142,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- запуск ---
 app = ApplicationBuilder().token(TOKEN).build()
 
-# пересылка всех сообщений
-app.add_handler(MessageHandler(filters.ALL & ~filters.User(ADMIN_ID), forward_to_admin))
+# команды
+app.add_handler(CommandHandler("start", start))
+
+# логика текста
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+# пересылка сообщений админу (кроме команд)
+app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND & ~filters.User(ADMIN_ID), forward_to_admin))
 
 # ответы администратора
 app.add_handler(MessageHandler(filters.ALL & filters.User(ADMIN_ID), admin_reply))
-
-# команды бота
-app.add_handler(CommandHandler("start", start))
-
-# текстовая логика
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
 
 print("Бот запущен...")
