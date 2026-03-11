@@ -64,6 +64,7 @@ async def start_payment_timer(message, context):
         await asyncio.sleep(60)
         total_seconds -= 60
 
+    # удаляем сообщение по окончании таймера
     try:
         await message.delete()
     except:
@@ -72,16 +73,7 @@ async def start_payment_timer(message, context):
 
 # --- отправка реквизитов и уведомление админу ---
 async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # загрузка
-    total = 10
-    load_msg = await update.message.reply_text("Cargando: " + "░" * total)
-    for i in range(1, total + 1):
-        await asyncio.sleep(1)
-        bar = "█" * i + "░" * (total - i)
-        await load_msg.edit_text(f"Cargando: {bar}")
-    await load_msg.delete()
-
-    # удалить старое сообщение реквизитов
+    # удалить старое сообщение реквизитов до отправки нового
     if "payment_msg" in context.user_data:
         try:
             await context.bot.delete_message(
@@ -90,6 +82,15 @@ async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except:
             pass
+
+    # загрузка
+    total = 10
+    load_msg = await update.message.reply_text("Cargando: " + "░" * total)
+    for i in range(1, total + 1):
+        await asyncio.sleep(1)
+        bar = "█" * i + "░" * (total - i)
+        await load_msg.edit_text(f"Cargando: {bar}")
+    await load_msg.delete()
 
     # сообщение с реквизитами
     text = (
@@ -118,7 +119,7 @@ async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass
 
-    # запуск таймера
+    # запуск таймера после отправки сообщения
     asyncio.create_task(start_payment_timer(msg, context))
 
 
