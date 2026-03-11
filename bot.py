@@ -27,8 +27,8 @@ def build_payment_text():
     return (
         "DATOS ACTUALES:\n\n"
         "NEQUI ✅\n"
-        "Beneficiario: Jose Zalupa\n"
-        "Número: 6382929393\n\n"
+        "Beneficiario: ARMANDO HERRERA\n"
+        "Número: 300 325 6888\n\n"
         "Después de realizar el pago, envíe una captura de pantalla del recibo al corredor con el que trabaja para confirmar el pago ❗\n\n"
         "ESTA INFORMACIÓN ES VÁLIDA DURANTE 20 MINUTOS DESDE EL MOMENTO DE SU RECEPCIÓN❗️"
     )
