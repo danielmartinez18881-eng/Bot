@@ -4,6 +4,9 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.environ.get("TOKEN")
+
+ADMIN_ID = 8065330336
+
 if not TOKEN:
     raise ValueError("Не установлен токен бота в переменной окружения TOKEN")
 
@@ -15,9 +18,11 @@ start_kb = make_keyboard(["Старт"])
 yes_kb = make_keyboard(["Да"])
 amount_kb = make_keyboard(["200", "400", "600"])
 
-# --- стартовое сообщение ---
+
+# --- старт ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_path = os.path.join("images", "card.jpg")
+
     if os.path.exists(photo_path):
         with open(photo_path, "rb") as photo_file:
             await update.message.reply_photo(
@@ -31,26 +36,56 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=start_kb
         )
 
-# --- функция для анимации и выдачи карточки ---
+
+# --- генерация карточек ---
 async def send_cards(update, amount):
     await update.message.reply_text(f"Генерируем пакет карточек ({amount})")
-    
-    # Создаём сообщение загрузки
+
     total_seconds = 14
     loading_msg = await update.message.reply_text("Загрузка: " + "░" * total_seconds)
-    
-    # Анимация загрузки
+
     for i in range(1, total_seconds + 1):
         await asyncio.sleep(1)
         bar = "█" * i + "░" * (total_seconds - i)
         await loading_msg.edit_text(f"Загрузка: {bar}")
-    
-    # Загрузка завершена — заменяем сообщение на "Карточка"
+
     await loading_msg.edit_text("Карточка")
 
-# --- обработчик текстовых сообщений ---
+
+# --- ответ администратора через reply ---
+async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if update.message.reply_to_message:
+
+        original = update.message.reply_to_message
+
+        if original.forward_from:
+            user_id = original.forward_from.id
+            text = update.message.text
+
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=text
+            )
+
+
+# --- основной обработчик сообщений ---
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     text = update.message.text.strip()
+    user_id = update.effective_user.id
+
+    # пересылка сообщений админу
+    if user_id != ADMIN_ID:
+        await context.bot.forward_message(
+            chat_id=ADMIN_ID,
+            from_chat_id=update.effective_chat.id,
+            message_id=update.message.message_id
+        )
+
     state = context.user_data.get("state", "START")
 
     if state == "START" and text == "Старт":
@@ -72,10 +107,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = "START"
 
     else:
-        await update.message.reply_text("Пожалуйста, используйте кнопки ниже для выбора.")
+        await update.message.reply_text(
+            "Пожалуйста, используйте кнопки ниже для выбора."
+        )
 
-# --- настройка приложения ---
+
+# --- запуск приложения ---
 app = ApplicationBuilder().token(TOKEN).build()
+
+# ВАЖНО: админский обработчик должен идти раньше
+app.add_handler(MessageHandler(filters.TEXT & filters.User(ADMIN_ID), admin_reply))
+
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
