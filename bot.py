@@ -6,7 +6,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.environ.get("TOKEN")
-ADMIN_CHAT_ID = -1003759435429
+ADMIN_CHAT_ID = -1003725431948
 
 if not TOKEN:
     raise ValueError("Не установлен TOKEN")
