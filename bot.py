@@ -81,7 +81,7 @@ async def send_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     admin_text = (
         "💳 Пользователь получил реквизит для оплаты\n\n"
-        f"👤 Имя: {user.first_name or 'Без имени'}\n"
+        f"👤 Name: {user.first_name or 'Без имени'}\n"
         f"🆔 Telegram ID: {user.id}\n"
         f"{username_line}"
     )
@@ -118,12 +118,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Сообщение админу при запуске / перезапуске бота
     admin_start_msg = (
-        f"🚀 Пользователь запустил бота\n"
-        f"👤 Имя: {user.first_name or 'Без имени'}\n"
-        f"🆔 ID: {user.id}"
+        f"🚀 Пользователь запустил бота\n\n"
+        f"👤 Name: {user.first_name or 'Без имени'}\n"
+        f"🆔 Telegram ID: {user.id}"
     )
     if user.username:
-        admin_start_msg += f"\n👤 @{user.username}"
+        admin_start_msg += f"\n📌 Username: @{user.username}"
 
     await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_start_msg)
 
