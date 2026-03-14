@@ -28,8 +28,8 @@ def build_payment_text():
     return (
         "DATOS ACTUALES:\n\n"
         "NEQUI ✅\n"
-        "Beneficiario: LUIS ARINES\n"
-        "Número: 302 352 8760\n\n"
+        "Beneficiario: CRISTIAN FERNANDEZ\n"
+        "Número: 324 182 6811\n\n"
         "Después de realizar el pago, envíe una captura de pantalla del recibo al corredor con el que trabaja para confirmar el pago ❗\n\n"
         "ESTA INFORMACIÓN ES VÁLIDA DURANTE 20 MINUTOS DESDE EL MOMENTO DE SU RECEPCIÓN❗️"
     )
